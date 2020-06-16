@@ -19,13 +19,13 @@ const _kCssFontSizeXxSmall = 'xx-small';
 const _kCssFontSizeLarger = 'larger';
 const _kCssFontSizeSmaller = 'smaller';
 const _kCssFontSizes = {
-  "1": _kCssFontSizeXxSmall,
-  "2": _kCssFontSizeXSmall,
-  "3": _kCssFontSizeSmall,
-  "4": _kCssFontSizeMedium,
-  "5": _kCssFontSizeLarge,
-  "6": _kCssFontSizeXLarge,
-  "7": _kCssFontSizeXxLarge,
+  '1': _kCssFontSizeXxSmall,
+  '2': _kCssFontSizeXSmall,
+  '3': _kCssFontSizeSmall,
+  '4': _kCssFontSizeMedium,
+  '5': _kCssFontSizeLarge,
+  '6': _kCssFontSizeXLarge,
+  '7': _kCssFontSizeXxLarge,
 };
 
 const _kCssFontStyle = 'font-style';
@@ -51,5 +51,19 @@ const _kCssTextDecorationOverline = 'overline';
 const _kCssTextDecorationUnderline = 'underline';
 
 final _spacingRegExp = RegExp(r'\s+');
+
+Iterable<String> _parseCssFontFamilies(String value) {
+  final parts = value.split(',');
+  final fontFamilies = <String>[];
+
+  for (final part in parts) {
+    final fontFamily = part
+        .trim()
+        .replaceFirstMapped(RegExp(r"""^("|')(.+)\1$"""), (m) => m.group(2));
+    if (fontFamily.isNotEmpty) fontFamilies.add(fontFamily);
+  }
+
+  return fontFamilies;
+}
 
 Iterable<String> _splitCss(String value) => value.split(_spacingRegExp);

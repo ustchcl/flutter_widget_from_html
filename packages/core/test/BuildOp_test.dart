@@ -5,16 +5,20 @@ import '_.dart';
 
 void main() {
   group('getInlineStyles', () {
-    testWidgets('renders inline style normally', (WidgetTester t) async {
+    testWidgets('renders inline style normally', (tester) async {
       final html = '<span style="color: #f00; color: #0f0;">Foo</span>';
-      final e = await explain(t, html);
+      final e = await explain(tester, html);
       expect(e, equals('[RichText:(#FF00FF00:Foo)]'));
     });
 
-    testWidgets('renders getInlineStyles in reversed', (WidgetTester t) async {
+    testWidgets('renders getInlineStyles in reversed', (tester) async {
       final html = '<span>Foo</span>';
-      final e = await explain(t, html,
-          factoryBuilder: (config) => _GetInlineStylesTest(config));
+      final e = await explain(tester, null,
+          hw: HtmlWidget(
+            html,
+            factoryBuilder: () => _GetInlineStylesTest(),
+            key: hwKey,
+          ));
       expect(e, equals('[RichText:(#FFFF0000:Foo)]'));
     });
   });
@@ -22,23 +26,29 @@ void main() {
   group('priority', () {
     final html = '<span>Foo</span>';
 
-    testWidgets('renders A first', (WidgetTester t) async {
-      final e = await explain(t, html,
-          factoryBuilder: (config) => _PriorityTest(config, a: 1, b: 2));
+    testWidgets('renders A first', (tester) async {
+      final e = await explain(tester, null,
+          hw: HtmlWidget(
+            html,
+            factoryBuilder: () => _PriorityTest(a: 1, b: 2),
+            key: hwKey,
+          ));
       expect(e, equals('[RichText:(:Foo A B)]'));
     });
 
-    testWidgets('renders B first', (WidgetTester t) async {
-      final e = await explain(t, html,
-          factoryBuilder: (config) => _PriorityTest(config, a: 2, b: 1));
+    testWidgets('renders B first', (tester) async {
+      final e = await explain(tester, null,
+          hw: HtmlWidget(
+            html,
+            factoryBuilder: () => _PriorityTest(a: 2, b: 1),
+            key: hwKey,
+          ));
       expect(e, equals('[RichText:(:Foo B A)]'));
     });
   });
 }
 
 class _GetInlineStylesTest extends WidgetFactory {
-  _GetInlineStylesTest(HtmlConfig config) : super(config);
-
   @override
   void parseTag(NodeMetadata meta, String tag, Map<dynamic, String> attrs) {
     meta.op = BuildOp(defaultStyles: (_, __) => ['color', '#f00']);
@@ -52,7 +62,7 @@ class _PriorityTest extends WidgetFactory {
   final int a;
   final int b;
 
-  _PriorityTest(HtmlConfig config, {this.a, this.b}) : super(config);
+  _PriorityTest({this.a, this.b});
 
   @override
   void parseTag(NodeMetadata meta, String tag, Map<dynamic, String> attrs) {

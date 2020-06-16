@@ -12,18 +12,17 @@ void main() {
   });
 
   testWidgets('skips element', (WidgetTester tester) async {
-    final explained = await explain(
-      tester,
-      html,
-      factoryBuilder: (config) => _IsNotRenderableTest(config),
-    );
+    final explained = await explain(tester, null,
+        hw: HtmlWidget(
+          html,
+          factoryBuilder: () => _IsNotRenderableTest(),
+          key: hwKey,
+        ));
     expect(explained, equals('[RichText:(:Bar.)]'));
   });
 }
 
 class _IsNotRenderableTest extends WidgetFactory {
-  _IsNotRenderableTest(HtmlConfig config) : super(config);
-
   @override
   void parseTag(NodeMetadata meta, String tag, Map<dynamic, String> attrs) {
     if (attrs.containsKey('class') && attrs['class'] == 'skipMe') {

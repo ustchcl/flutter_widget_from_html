@@ -16,19 +16,34 @@ const redX = '<span style="background-color:#f00;font-size:0.75em;">x</span>';
 
 class _TestApp extends StatelessWidget {
   final String html;
+  final Key targetKey;
 
-  const _TestApp(this.html, {Key key}) : super(key: key);
+  const _TestApp(this.html, {Key key, this.targetKey}) : super(key: key);
 
   @override
   Widget build(BuildContext context) => MaterialApp(
         home: Scaffold(
-          body: Column(
-            children: <Widget>[
-              Text(html),
-              Divider(),
-              HtmlWidget(html),
-            ],
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          body: RepaintBoundary(
+            child: Container(
+              child: Column(
+                children: <Widget>[
+                  Padding(
+                    child: Text(html),
+                    padding: const EdgeInsets.all(10),
+                  ),
+                  Divider(),
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: HtmlWidget(html),
+                  ),
+                ],
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+              ),
+              decoration: BoxDecoration(color: Colors.white),
+              width: 400,
+            ),
+            key: targetKey,
           ),
         ),
         theme: ThemeData.light(),
@@ -36,9 +51,10 @@ class _TestApp extends StatelessWidget {
 }
 
 void _test(String name, String html) => testGoldens(name, (tester) async {
-      await tester.pumpWidget(_TestApp(html));
+      final key = UniqueKey();
+      await tester.pumpWidget(_TestApp(html, targetKey: key));
       await expectLater(
-        find.byType(HtmlWidget),
+        find.byKey(key),
         matchesGoldenFile('./images/$name.png'),
       );
     });
@@ -67,21 +83,19 @@ void main() {
     'SCRIPT': '<script>foo = bar</script>Bye script.',
     'STYLE': '<style>body { background: #fff; }</style>Bye style.',
     'CODE':
-        """<code><span style="color: #000000"><span style="color: #0000BB">&lt;?php phpinfo</span><span style="color: #007700">(); </span><span style="color: #0000BB">?&gt;</span></span></code>""",
+        '<code><span style="color: #000000"><span style="color: #0000BB">&lt;?php phpinfo</span><span style="color: #007700">(); </span><span style="color: #0000BB">?&gt;</span></span></code>',
     'KBD': '<kbd>ESC</kbd> = exit',
     'PRE': """<pre>&lt;?php
-highlight_string('&lt;?php phpinfo(); ?&gt;');
+  highlight_string('&lt;?php phpinfo(); ?&gt;');
 ?&gt;</pre>""",
     'SAMP': '<samp>Disk fault</samp>',
     'TT': '<tt>Teletype</tt>',
-    'H1,H2,H3,H4,H5,H6': """
-<h1>Heading 1</h1>
-<h2>Heading 2</h2>
-<h3>Heading 3</h3>
-<h4>Heading 4</h4>
-<h5>Heading 5</h5>
-<h6>Heading 6</h6>
-""",
+    'H1': '<h1>Heading 1</h1>',
+    'H2': '<h2>Heading 2</h2>',
+    'H3': '<h3>Heading 3</h3>',
+    'H4': '<h4>Heading 4</h4>',
+    'H5': '<h5>Heading 5</h5>',
+    'H6': '<h6>Heading 6</h6>',
     'MARK': '<mark>Foo</mark>',
     'inline/background-color/block':
         '<div style="background-color: #f00"><div>Foo</div></div>',
@@ -95,12 +109,12 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
     'inline/border/double':
         '<span style="border-bottom: 1px double">Foo</span>',
     'inline/border/solid': '<span style="border-bottom: 1px solid">Foo</span>',
-    'inline/color': """
+    'inline/color': '''
 <span style="color: #F00">red</span>
 <span style="color: #0F08">red 53%</span>
 <span style="color: #00FF00">green</span>
 <span style="color: #00FF0080">green 50%</span>
-""",
+''',
     'inline/display/span': '<div>1 <span>2</span></div>',
     'inline/display/block':
         '<div>1 <span style="display: block">2</span></div>',
@@ -111,8 +125,8 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
         '<div>1 <div style="display: inline-block">2</div></div>',
     'inline/display/none': '<div>1 <div style="display: none">2</div></div>',
     'FONT/color': '<font color="#F00">Foo</font>',
-    'FONT/face': '<font face="Monospace">Foo</font>',
-    'FONT/size': """
+    'FONT/face': '<font face="Courier">Foo</font>',
+    'FONT/size': '''
 <font size="7">Size 7</font>
 <font size="6">Size 6</font>
 <font size="5">Size 5</font>
@@ -120,11 +134,11 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
 <font size="3">Size 3</font>
 <font size="2">Size 2</font>
 <font size="1">Size 1</font>
-""",
-    'inline/font-family': '<span style="font-family: Monospace">Foo</span>',
+''',
+    'inline/font-family': '<span style="font-family: Courier">Foo</span>',
     'BIG': '<big>Foo</big>',
     'SMALL': '<small>Foo</small>',
-    'inline/font-size': """
+    'inline/font-size': '''
 <span style="font-size: 100px">100px</span>
 <span style="font-size: xx-large">xx-large</span>
 <span style="font-size: x-large">x-large</span>
@@ -136,7 +150,7 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
 <span style="font-size: larger">larger</span>
 <span style="font-size: smaller">smaller</span>
 <span style="font-size: 2em">2em</span>
-""",
+''',
     'CITE': 'This is a <cite>citation</cite>.',
     'DFN': 'This is a <dfn>definition</dfn>.',
     'I': 'This is an <i>italic</i> text.',
@@ -146,7 +160,7 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
         '<span style="font-style: italic">Italic text</span>',
     'B': 'This is a <b>bold</b> text.',
     'STRONG': 'This is a <strong>strong</strong> text.',
-    'inline/font-weight': """
+    'inline/font-weight': '''
 <span style="font-weight: bold">bold</span>
 <span style="font-weight: 100">one</span>
 <span style="font-weight: 200">two</span>
@@ -157,10 +171,18 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
 <span style="font-weight: 700">seven</span>
 <span style="font-weight: 800">eight</span>
 <span style="font-weight: 900">nine</span>
-""",
+''',
+    'inline/line-height': '''
+<p>Normal</p>
+<p style="line-height: 1.5">Line height x1.5</p>
+<p>Normal</p>
+<p style="line-height: 300%">Line height x3</p>
+<p>Normal</p>
+''',
     'DEL': 'This is some <del>deleted</del> text.',
     'INS': 'This is some <ins>inserted</ins> text.',
-    'S,STRIKE': '<s>Foo</s> <strike>bar</strike>',
+    'S': '<s>Foo</s>',
+    'STRIKE': '<strike>Foo</strike>',
     'U': 'This is an <u>underline</u> text.',
     'inline/text-decoration/line-through':
         '<span style="text-decoration: line-through">line</span>',
@@ -168,13 +190,13 @@ highlight_string('&lt;?php phpinfo(); ?&gt;');
         '<span style="text-decoration: overline">over</span>',
     'inline/text-decoration/underline':
         '<span style="text-decoration: underline">under</span>',
-    'inline/text-decoration/none': """
+    'inline/text-decoration/none': '''
 <span style="text-decoration: line-through">
 <span style="text-decoration: overline">
 <span style="text-decoration: underline">
 foo <span style="text-decoration: none">bar</span></span></span></span>
-""",
-    'inline/margin/4_values': """
+''',
+    'inline/margin/4_values': '''
 ----
 <div style="margin: 1px 2px 3px 4px">all</div>
 ----
@@ -186,8 +208,8 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
 ----
 <div style="margin: 0 0 3px 0">left only</div>
 ---
-""",
-    'inline/margin/2_values': """
+''',
+    'inline/margin/2_values': '''
 ----
 <div style="margin: 5px 10px">both</div>
 ----
@@ -195,7 +217,7 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
 ----
 <div style="margin: 0 10px">horizontal only</div>
 ----
-""",
+''',
     'inline/margin/1_value': '----<div style="margin: 3px">Foo</div>----',
     'inline/margin/margin-top':
         '----<div style="margin-top: 3px">Foo</div>----',
@@ -205,7 +227,7 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
         '----<div style="margin-top: 3px">Foo</div>----',
     'inline/margin/margin-left':
         '----<div style="margin-left: 3px">Foo</div>----',
-    'inline/padding/4_values': """
+    'inline/padding/4_values': '''
 ----
 <div style="padding: 1px 2px 3px 4px">all</div>
 ----
@@ -217,8 +239,8 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
 ----
 <div style="padding: 0 0 3px 0">left only</div>
 ---
-""",
-    'inline/padding/2_values': """
+''',
+    'inline/padding/2_values': '''
 ----
 <div style="padding: 5px 10px">both</div>
 ----
@@ -226,7 +248,7 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
 ----
 <div style="padding: 0 10px">horizontal only</div>
 ----
-""",
+''',
     'inline/padding/1_value': '----<div style="padding: 3px">Foo</div>----',
     'inline/padding/padding-top':
         '----<div style="padding-top: 3px">Foo</div>----',
@@ -246,10 +268,10 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
     'SUB': '<p>Almost every developer\'s favorite molecule is '
         'C<sub>8</sub>H<sub>10</sub>N<sub>4</sub>O<sub>2</sub>, also known as "caffeine."</p>',
     // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/sup
-    'SUP': """
+    'SUP': '''
 <p>The <b>Pythagorean theorem</b> is often expressed as the following equation:</p>
 <p><var>a<sup>2</sup></var> + <var>b<sup>2</sup></var> = <var>c<sup>2</sup></var></p>
-""",
+''',
     'inline/vertical-align/top':
         'Foo<span style="vertical-align: top">$redX</span>',
     'inline/vertical-align/bottom':
@@ -260,10 +282,8 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
         'Foo<span style="vertical-align: sub">$redX</span>',
     'inline/vertical-align/super':
         'Foo<span style="vertical-align: super">$redX</span>',
-    'LI/OL': '<ol><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/UL': '<ul><li>One</li><li>Two</li><li>Three</li><ul>',
-    'LI/nested': """
-<ul>
+    'LI,OL,UL': '''
+<ol>
   <li>One</li>
   <li>
     Two
@@ -280,39 +300,39 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
     </ul>
   </li>
   <li>Three</li>
-</ul>""",
-    'LI/OL/reversed': '<ol reversed><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/reversed_start_99':
+</ol>''',
+    'OL/reversed': '<ol reversed><li>One</li><li>Two</li><li>Three</li><ol>',
+    'OL/reversed_start':
         '<ol reversed start="99"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/start_99':
-        '<ol start="99"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/type_lower-alpha':
+    'OL/start': '<ol start="99"><li>One</li><li>Two</li><li>Three</li><ol>',
+    'OL/type/lower-alpha':
         '<ol type="a"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/type_upper-alpha':
+    'OL/type/upper-alpha':
         '<ol type="A"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/type_lower-roman':
+    'OL/type/lower-roman':
         '<ol type="i"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/OL/type_upper-roman':
+    'OL/type/upper-roman':
         '<ol type="I"><li>One</li><li>Two</li><li>Three</li><ol>',
-    'LI/list-style-type/disc':
+    'inline/list-style-type/disc':
         '<ol style="list-style-type: disc"><li>Foo</li></ol>',
-    'LI/list-style-type/circle':
+    'inline/list-style-type/circle':
         '<ul style="list-style-type: circle"><li>Foo</li></ul>',
-    'LI/list-style-type/square':
+    'inline/list-style-type/square':
         '<ul style="list-style-type: square"><li>Foo</li></ul>',
-    'LI/padding-inline-start': """
-<ul style="padding-inline-start: 99px">
-  <li style="padding-inline-start: 199px">199px</li>
-  <li style="padding-inline-start: 299px">299px</li>
-  <li>99px</li>
+    'inline/LI_padding-inline-start': '''
+<ul style="padding-inline-start: 9px">
+  <li style="padding-inline-start: 19px">19px</li>
+  <li style="padding-inline-start: 29px">29px</li>
+  <li>9px</li>
 <ul>
-""",
-    'LI/rtl':
+''',
+    'OL/rtl':
         '<div dir="rtl"><ol><li>One</li><li>Two</li><li>Three</li><ol></div>',
-    'TABLE': """<table>
+    'TABLE,CAPTION,TBODY,THEAD,TFOOT,TR,TH,TD': '''<table border="1">
       <caption>Caption</caption>
-      <tr><th>Header 1</th><th>Header 2</th></tr>
-      <tr><td>Value 1</td><td>Value 2</td></tr>
-    </table>""",
+      <tfoot><tr><td>Footer 1</td><td>Footer 2</td></tr></tfoot>
+      <tbody><tr><td>Value 1</td><td>Value 2</td></tr></tbody>
+      <thead><tr><th>Header 1</th><th>Header 2</th></tr></thead>
+    </table>''',
   }).entries.forEach((entry) => _test(entry.key, entry.value));
 }

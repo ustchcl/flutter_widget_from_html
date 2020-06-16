@@ -1,13 +1,14 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui' as ui show ParagraphBuilder;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:html/dom.dart' as dom;
 
 import 'builder.dart';
+import 'core_html_widget.dart';
 import 'core_data.dart';
 import 'core_helpers.dart';
-import 'core_html_widget.dart';
 
 part 'ops/style_bg_color.dart';
 part 'ops/style_direction.dart';
@@ -27,14 +28,13 @@ part 'ops/text.dart';
 part 'parser/border.dart';
 part 'parser/color.dart';
 part 'parser/css.dart';
+part 'parser/line_height.dart';
 part 'parser/length.dart';
 
 final _dataUriRegExp = RegExp(r'^data:image/\w+;base64,');
 
 /// A factory to build widget for HTML elements.
 class WidgetFactory {
-  final HtmlConfig _config;
-
   BuildOp _styleBgColor;
   BuildOp _styleMargin;
   BuildOp _stylePadding;
@@ -49,10 +49,9 @@ class WidgetFactory {
   BuildOp _tagLi;
   BuildOp _tagQ;
   BuildOp _tagTable;
+  HtmlWidget _widget;
 
-  WidgetFactory(this._config);
-
-  Color get hyperlinkColor => _config.hyperlinkColor;
+  HtmlWidget get widget => _widget;
 
   Iterable<Widget> buildAligns(
     BuildContext _,
@@ -65,8 +64,7 @@ class WidgetFactory {
         return Align(alignment: alignment, child: widget);
       });
 
-  Widget buildBody(Iterable<Widget> children) =>
-      buildPadding(buildColumn(children), _config.bodyPadding);
+  Widget buildBody(Iterable<Widget> children) => buildColumn(children);
 
   Widget buildColumn(Iterable<Widget> children) => children?.isNotEmpty == true
       ? WidgetPlaceholder(
@@ -151,9 +149,9 @@ class WidgetFactory {
       widgets.map((widget) => GestureDetector(child: widget, onTap: onTap));
 
   GestureTapCallback buildGestureTapCallbackForUrl(String url) => url != null
-      ? () => _config.onTapUrl != null
-          ? _config.onTapUrl(url)
-          : print("[flutter_widget_from_html] Tapped url $url")
+      ? () => widget.onTapUrl != null
+          ? widget.onTapUrl(url)
+          : print('[flutter_widget_from_html] Tapped url $url')
       : null;
 
   InlineSpan buildGestureTapCallbackSpan(
@@ -227,8 +225,8 @@ class WidgetFactory {
   Widget buildTable(List<TableRow> rows, {TableBorder border}) =>
       rows?.isNotEmpty == true ? Table(border: border, children: rows) : null;
 
-  TableCell buildTableCell(Widget child) => TableCell(
-      child: buildPadding(child, _config.tableCellPadding) ?? widget0);
+  TableCell buildTableCell(Widget child) =>
+      TableCell(child: buildPadding(child, widget.tableCellPadding) ?? widget0);
 
   Widget buildText(TextBits text) => (text..trimRight()).isNotEmpty
       ? WidgetPlaceholder(
@@ -243,7 +241,7 @@ class WidgetFactory {
     TextBits text,
   ) {
     final tsb = text.tsb;
-    tsb?.build(context);
+    final tsh = tsb?.build(context);
 
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final widgets = <Widget>[];
@@ -251,7 +249,7 @@ class WidgetFactory {
       if (compiled is InlineSpan) {
         widgets.add(RichText(
           text: compiled,
-          textAlign: tsb?.textAlign ?? TextAlign.start,
+          textAlign: tsh?.align ?? TextAlign.start,
           textScaleFactor: textScaleFactor,
         ));
       } else if (compiled is Widget) {
@@ -274,7 +272,7 @@ class WidgetFactory {
     final overline = pd?.contains(TextDecoration.overline) == true;
     final underline = pd?.contains(TextDecoration.underline) == true;
 
-    final List<TextDecoration> list = [];
+    final list = <TextDecoration>[];
     if (meta.decoOver == true || (overline && meta.decoOver != false)) {
       list.add(TextDecoration.overline);
     }
@@ -321,30 +319,36 @@ class WidgetFactory {
     return null;
   }
 
-  TextStyle buildTextStyle(TextStyleBuilders tsb, TextStyle p, NodeMetadata m) {
+  TextStyleHtml tsb(TextStyleBuilders tsb, TextStyleHtml p, NodeMetadata m) {
     if (m == null) return p;
 
-    final decoration = buildTextDecoration(p, m);
-    final fontSize = buildTextFontSize(tsb, p, m);
+    final decoration = buildTextDecoration(p.style, m);
+    final fontSize = buildTextFontSize(tsb, p.style, m);
     final fontStyle = buildFontStyle(m);
     if (m.color == null &&
         decoration == null &&
         m.decorationStyle == null &&
-        m.fontFamily == null &&
+        m.fontFamilies == null &&
         fontSize == null &&
         fontStyle == null &&
-        m.fontWeight == null) {
+        m.fontWeight == null &&
+        m.height == null) {
       return p;
     }
 
     return p.copyWith(
-      color: m.color,
-      decoration: decoration,
-      decorationStyle: m.decorationStyle,
-      fontFamily: m.fontFamily,
-      fontSize: fontSize,
-      fontStyle: fontStyle,
-      fontWeight: m.fontWeight,
+      height: m.height,
+      style: p.style.copyWith(
+        color: m.color,
+        decoration: decoration,
+        decorationStyle: m.decorationStyle,
+        fontFamily:
+            m.fontFamilies?.isNotEmpty == true ? m.fontFamilies.first : null,
+        fontFamilyFallback: m.fontFamilies?.skip(1)?.toList(growable: false),
+        fontSize: fontSize,
+        fontStyle: fontStyle,
+        fontWeight: m.fontWeight,
+      ),
     );
   }
 
@@ -354,28 +358,28 @@ class WidgetFactory {
     if (p == null) return null;
     if (p.hasScheme) return p.toString();
 
-    final b = _config.baseUrl;
+    final b = widget.baseUrl;
     if (b == null) return null;
 
     return b.resolveUri(p).toString();
   }
 
   void customStyleBuilder(NodeMetadata meta, dom.Element element) {
-    if (_config.customStylesBuilder == null) return;
+    if (widget.customStylesBuilder == null) return;
 
-    final styles = _config.customStylesBuilder(element);
+    final styles = widget.customStylesBuilder(element);
     if (styles == null) return;
 
     meta.styles = styles;
   }
 
   void customWidgetBuilder(NodeMetadata meta, dom.Element element) {
-    if (_config.customWidgetBuilder == null) return;
+    if (widget.customWidgetBuilder == null) return;
 
-    final widget = _config.customWidgetBuilder(element);
-    if (widget == null) return;
+    final built = widget.customWidgetBuilder(element);
+    if (built == null) return;
 
-    meta.op = BuildOp(onWidgets: (_, __) => [widget]);
+    meta.op = BuildOp(onWidgets: (_, __) => [built]);
   }
 
   String getListStyleMarker(String type, int i) {
@@ -385,7 +389,7 @@ class WidgetFactory {
         if (i >= 1 && i <= 26) {
           // the specs said it's unspecified after the 26th item
           // TODO: generate something like aa, ab, etc. when needed
-          return "${String.fromCharCode(96 + i)}.";
+          return '${String.fromCharCode(96 + i)}.';
         }
         return '';
       case _kCssListStyleTypeAlphaUpper:
@@ -393,21 +397,21 @@ class WidgetFactory {
         if (i >= 1 && i <= 26) {
           // the specs said it's unspecified after the 26th item
           // TODO: generate something like AA, AB, etc. when needed
-          return "${String.fromCharCode(64 + i)}.";
+          return '${String.fromCharCode(64 + i)}.';
         }
         return '';
       case _kCssListStyleTypeCircle:
         return '-';
       case _kCssListStyleTypeDecimal:
-        return "$i.";
+        return '$i.';
       case _kCssListStyleTypeDisc:
         return '•';
       case _kCssListStyleTypeRomanLower:
         final roman = getListStyleMarkerRoman(i)?.toLowerCase();
-        return roman != null ? "$roman." : '';
+        return roman != null ? '$roman.' : '';
       case _kCssListStyleTypeRomanUpper:
         final roman = getListStyleMarkerRoman(i);
-        return roman != null ? "$roman." : '';
+        return roman != null ? '$roman.' : '';
       case _kCssListStyleTypeSquare:
         return '+';
     }
@@ -440,6 +444,11 @@ class WidgetFactory {
 
   TextDecorationStyle parseCssBorderStyle(String value) =>
       _parseCssBorderStyle(value);
+
+  Iterable<String> parseCssFontFamilies(String value) =>
+      _parseCssFontFamilies(value);
+
+  CssLineHeight parseCssLineHeight(String value) => _parseCssLineHeight(value);
 
   CssLength parseCssLength(String value) => _parseCssLength(value);
 
@@ -504,7 +513,7 @@ class WidgetFactory {
         break;
 
       case _kCssFontFamily:
-        meta.fontFamily = value;
+        meta.fontFamilies = parseCssFontFamilies(value);
         break;
 
       case _kCssFontSize:
@@ -555,6 +564,12 @@ class WidgetFactory {
             meta.fontWeight = FontWeight.w900;
             break;
         }
+        break;
+
+      case _kCssLineHeight:
+        final lineHeight = parseCssLineHeight(value);
+        if (lineHeight != null) meta.height = lineHeight;
+
         break;
 
       case _kCssTextAlign:
@@ -746,7 +761,7 @@ class WidgetFactory {
 
       case 'kbd':
       case 'samp':
-        meta.fontFamily = 'monospace';
+        meta.fontFamilies = [_kTagCodeFont1, _kTagCodeFont2];
         break;
 
       case _kTagOrderedList:
@@ -807,6 +822,9 @@ class WidgetFactory {
       }
     }
   }
+
+  @mustCallSuper
+  void reset(HtmlWidget widget) => _widget = widget;
 
   BuildOp styleBgColor() {
     _styleBgColor ??= _StyleBgColor(this).buildOp;

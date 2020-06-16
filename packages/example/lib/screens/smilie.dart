@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
-const kHtml = """
+const kHtml = '''
 <p>Hello <img class="smilie smilie-1" alt=":)" src="http://domain.com/sprites.png" />!</p>
 <p>How are you <img class="smilie smilie-2" alt=":P" src="http://domain.com/sprites.png" />?
-""";
+''';
 
 const kSmilies = {':)': '🙂'};
 
@@ -14,9 +14,12 @@ class SmilieScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text('SmilieScreen'),
         ),
-        body: HtmlWidget(
-          kHtml,
-          factoryBuilder: (config) => _SmiliesWidgetFactory(config),
+        body: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: HtmlWidget(
+            kHtml,
+            factoryBuilder: () => _SmiliesWidgetFactory(),
+          ),
         ),
       );
 }
@@ -29,8 +32,6 @@ class _SmiliesWidgetFactory extends WidgetFactory {
       return pieces..first?.text?.addText(text);
     },
   );
-
-  _SmiliesWidgetFactory(HtmlConfig config) : super(config);
 
   @override
   void parseTag(NodeMetadata meta, String tag, Map<dynamic, String> attrs) {
