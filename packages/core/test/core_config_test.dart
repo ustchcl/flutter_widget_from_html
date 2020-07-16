@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:network_image_mock/network_image_mock.dart';
 
 import '_.dart' as helper;
 
@@ -151,18 +152,21 @@ void main() {
       expect(e, equals('[RichText:(:image dot png)]'));
     });
 
-    testWidgets('renders with value', (WidgetTester tester) async {
-      final explained = await explain(
-        tester,
-        HtmlWidget(html, baseUrl: baseUrl, key: helper.hwKey),
-      );
-      expect(
-          explained,
-          equals('[ImageLayout('
-              'NetworkImage("http://base.com/path/image.png", scale: 1.0), '
-              'text: "image dot png"'
-              ')]'));
-    });
+    testWidgets(
+      'renders with value',
+      (tester) => mockNetworkImagesFor(() async {
+        final explained = await explain(
+          tester,
+          HtmlWidget(html, baseUrl: baseUrl, key: helper.hwKey),
+        );
+        expect(
+            explained,
+            equals(
+                '[Image:image=NetworkImage("http://base.com/path/image.png", scale: 1.0),'
+                'semanticLabel=image dot png'
+                ']'));
+      }),
+    );
   });
 
   group('customStylesBuilder', () {
@@ -237,41 +241,6 @@ void main() {
   });
 
   // TODO: onTapUrl
-
-  group('tableCellPadding', () {
-    final tableCellPadding = EdgeInsets.all(10);
-    final html = '<table><tr><td>Foo</td></tr></table>';
-
-    testWidgets('renders default value', (WidgetTester tester) async {
-      final explained =
-          await explain(tester, HtmlWidget(html, key: helper.hwKey));
-      expect(
-          explained,
-          equals('[Table:\n'
-              '[Padding:(5,5,5,5),child=[RichText:(:Foo)]]\n'
-              ']'));
-    });
-
-    testWidgets('renders custom value', (WidgetTester tester) async {
-      final explained = await explain(
-        tester,
-        HtmlWidget(html, key: helper.hwKey, tableCellPadding: tableCellPadding),
-      );
-      expect(
-          explained,
-          equals('[Table:\n'
-              '[Padding:(10,10,10,10),child=[RichText:(:Foo)]]\n'
-              ']'));
-    });
-
-    testWidgets('renders null value', (WidgetTester tester) async {
-      final explained = await explain(
-        tester,
-        HtmlWidget(html, key: helper.hwKey, tableCellPadding: null),
-      );
-      expect(explained, equals('[Table:\n[RichText:(:Foo)]\n]'));
-    });
-  });
 
   group('textStyle', () {
     final html = 'Foo';

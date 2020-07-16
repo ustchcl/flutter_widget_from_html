@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart'
+    as enhanced;
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart'
+    as core;
 import 'package:golden_toolkit/golden_toolkit.dart';
 
 // https://lipsum.com/feed/html
@@ -14,45 +17,68 @@ const lipsum = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
 
 const redX = '<span style="background-color:#f00;font-size:0.75em;">x</span>';
 
+final _withEnhancedRegExp = RegExp(r'(colspan|rowspan)');
+
 class _TestApp extends StatelessWidget {
   final String html;
   final Key targetKey;
+  final bool withEnhanced;
 
-  const _TestApp(this.html, {Key key, this.targetKey}) : super(key: key);
+  const _TestApp(
+    this.html, {
+    Key key,
+    this.targetKey,
+    this.withEnhanced,
+  }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        home: Scaffold(
-          body: RepaintBoundary(
-            child: Container(
-              child: Column(
-                children: <Widget>[
-                  Padding(
-                    child: Text(html),
-                    padding: const EdgeInsets.all(10),
-                  ),
-                  Divider(),
-                  Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: HtmlWidget(html),
-                  ),
-                ],
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-              ),
-              decoration: BoxDecoration(color: Colors.white),
-              width: 400,
+  Widget build(BuildContext context) {
+    final children = <Widget>[
+      Padding(
+        child: Text(html),
+        padding: const EdgeInsets.all(10),
+      ),
+      Divider(),
+      Padding(
+        padding: const EdgeInsets.all(10),
+        child: core.HtmlWidget(html),
+      ),
+    ];
+
+    if (withEnhanced) {
+      children.addAll(<Widget>[
+        Divider(),
+        enhanced.HtmlWidget(html),
+      ]);
+    }
+
+    return MaterialApp(
+      home: Scaffold(
+        body: RepaintBoundary(
+          child: Container(
+            child: Column(
+              children: children,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
             ),
-            key: targetKey,
+            decoration: BoxDecoration(color: Colors.white),
+            width: 400,
           ),
+          key: targetKey,
         ),
-        theme: ThemeData.light(),
-      );
+      ),
+      theme: ThemeData.light(),
+    );
+  }
 }
 
 void _test(String name, String html) => testGoldens(name, (tester) async {
       final key = UniqueKey();
-      await tester.pumpWidget(_TestApp(html, targetKey: key));
+      await tester.pumpWidget(_TestApp(
+        html,
+        targetKey: key,
+        withEnhanced: _withEnhancedRegExp.hasMatch(name),
+      ));
       await expectLater(
         find.byKey(key),
         matchesGoldenFile('./images/$name.png'),
@@ -172,6 +198,15 @@ void main() {
 <span style="font-weight: 800">eight</span>
 <span style="font-weight: 900">nine</span>
 ''',
+    'inline/sizing/complicated_box': '''
+<div style="background-color: red; color: white; padding: 20px;">
+  <div style="background-color: green;">
+    <div style="background-color: blue; height: 100px; margin: 15px; padding: 5px; width: 100px;">
+      Foo
+    </div>
+  </div>
+</div>
+''',
     'inline/line-height': '''
 <p>Normal</p>
 <p style="line-height: 1.5">Line height x1.5</p>
@@ -196,6 +231,8 @@ void main() {
 <span style="text-decoration: underline">
 foo <span style="text-decoration: none">bar</span></span></span></span>
 ''',
+    'inline/text-overflow/ellipsis':
+        '<div style="max-lines: 2; text-overflow: ellipsis">${"hello world " * 50}</div>',
     'inline/margin/4_values': '''
 ----
 <div style="margin: 1px 2px 3px 4px">all</div>
@@ -334,5 +371,54 @@ foo <span style="text-decoration: none">bar</span></span></span></span>
       <tbody><tr><td>Value 1</td><td>Value 2</td></tr></tbody>
       <thead><tr><th>Header 1</th><th>Header 2</th></tr></thead>
     </table>''',
+    'inline/display/table': '''
+<div style="display: table">
+  <div style="display: table-caption; text-align: center">Caption</div>
+  <div style="display: table-row; font-weight: bold">
+    <span style="display: table-cell">Header 1</span>
+    <span style="display: table-cell">Header 2</span>
+  </div>
+  <div style="display: table-row">
+    <span style="display: table-cell">Value 1</span>
+    <span style="display: table-cell">Value 2</span>
+  </div>
+</div>''',
+    'TABLE/colspan': '''
+<table border="1">
+  <caption>Source: <a href="https://www.w3schools.com/tags/att_td_colspan.asp">w3schools</a></caption>
+  <tr>
+    <th>Month</th>
+    <th>Savings</th>
+  </tr>
+  <tr>
+    <td>January</td>
+    <td>\$100</td>
+  </tr>
+  <tr>
+    <td>February</td>
+    <td>\$80</td>
+  </tr>
+  <tr>
+    <td colspan="2">Sum: \$180</td>
+  </tr>
+</table>''',
+    'TABLE/rowspan': '''
+<table border="1">
+  <caption>Source: <a href="https://www.w3schools.com/tags/att_td_colspan.asp">w3schools</a></caption>
+  <tr>
+    <th>Month</th>
+    <th>Savings</th>
+    <th>Savings for holiday!</th>
+  </tr>
+  <tr>
+    <td>January</td>
+    <td>\$100</td>
+    <td rowspan="2">\$50</td>
+  </tr>
+  <tr>
+    <td>February</td>
+    <td>\$80</td>
+  </tr>
+</table>''',
   }).entries.forEach((entry) => _test(entry.key, entry.value));
 }

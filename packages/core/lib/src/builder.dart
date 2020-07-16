@@ -208,7 +208,6 @@ class NodeMetadata {
   String fontSize;
   bool fontStyleItalic;
   FontWeight fontWeight;
-  CssLineHeight height;
   bool _isBlockElement;
   bool isNotRenderable;
   List<String> _styles;
@@ -258,11 +257,13 @@ class NodeMetadata {
   set isBlockElement(bool v) => _isBlockElement = v;
 
   set op(BuildOp op) {
+    if (op == null) return;
     _buildOps ??= [];
     if (!_buildOps.contains(op)) _buildOps.add(op);
   }
 
   set styles(Iterable<String> styles) {
+    if (styles == null) return;
     assert(styles.length % 2 == 0);
     assert(!_stylesFrozen);
     _styles ??= [];

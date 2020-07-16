@@ -35,16 +35,16 @@ Future<String> explain(
   WidgetTester tester,
   String html, {
   bool buildFutureBuilderWithData = true,
-  String Function(Widget) explainer,
+  String Function(Explainer, Widget) explainer,
   Widget hw,
   void Function(BuildContext) preTest,
+  bool rtl = false,
   TextStyle textStyle,
 }) async {
   assert((html == null) != (hw == null));
   hw ??= HtmlWidget(
     html,
     key: hwKey,
-    tableCellPadding: const EdgeInsets.all(0),
     textStyle: textStyle,
   );
 
@@ -68,7 +68,13 @@ Future<String> explain(
               // exclude semantics for faster run but mostly because of this bug
               // https://github.com/flutter/flutter/issues/51936
               // which is failing some of our tests
-              child: DefaultTextStyle(style: style, child: hw),
+              child: DefaultTextStyle(
+                style: style,
+                child: Directionality(
+                  textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+                  child: hw,
+                ),
+              ),
             ),
           ),
         );
@@ -106,13 +112,8 @@ Future<String> explainMargin(
   final explained = await explain(
     tester,
     null,
-    hw: Directionality(
-      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
-      child: HtmlWidget(
-        'x${html}x',
-        key: hwKey,
-      ),
-    ),
+    hw: HtmlWidget('x${html}x', key: hwKey),
+    rtl: rtl,
   );
   final match = _explainMarginRegExp.firstMatch(explained);
   return match == null ? explained : match[1];
@@ -120,7 +121,7 @@ Future<String> explainMargin(
 
 class Explainer {
   final BuildContext context;
-  final String Function(Widget) explainer;
+  final String Function(Explainer, Widget) explainer;
   final TextStyle _defaultStyle;
 
   Explainer(this.context, {this.explainer})
@@ -128,14 +129,34 @@ class Explainer {
 
   String explain(Widget widget) => _widget(widget);
 
-  String _borderSide(BorderSide s) => '${s.color},w=${s.width}';
+  String _borderSide(BorderSide s) =>
+      "${s.width}@${s.style.toString().replaceFirst('BorderStyle.', '')}${_color(s.color)}";
+
+  String _boxBorder(BoxBorder b) {
+    if (b == null) return '';
+
+    final top = _borderSide(b.top);
+    final right = b is Border ? _borderSide(b.right) : '';
+    final bottom = _borderSide(b.bottom);
+    final left = b is Border ? _borderSide(b.left) : '';
+
+    if (top == right && right == bottom && bottom == left) {
+      return top;
+    }
+
+    return '($top,$right,$bottom,$left)';
+  }
+
+  String _boxConstraints(BoxConstraints bc) =>
+      bc.toString().replaceAll('BoxConstraints', '');
 
   String _boxDecoration(BoxDecoration d) {
-    var s = '';
+    final buffer = StringBuffer();
 
-    if (d.color != null) s += 'bg=${_color(d.color)},';
+    if (d.color != null) buffer.write('bg=${_color(d.color)},');
+    if (d.border != null) buffer.write('border=${_boxBorder(d.border)},');
 
-    return s;
+    return buffer.toString();
   }
 
   String _color(Color c) =>
@@ -146,9 +167,37 @@ class Explainer {
     return h.length == 1 ? '0$h' : h;
   }
 
+  String _container(Container container) {
+    final buffer = StringBuffer();
+
+    if (container.decoration != null) {
+      buffer.write(_boxDecoration(container.decoration));
+    }
+
+    if (container.child != null) {
+      buffer.write('child=${_widget(container.child)}');
+    }
+
+    return '[Container:$buffer]';
+  }
+
   String _edgeInsets(EdgeInsets e) =>
       '(${e.top.truncate()},${e.right.truncate()},'
       '${e.bottom.truncate()},${e.left.truncate()})';
+
+  String _image(Image image) {
+    final buffer = StringBuffer();
+
+    buffer.write('image=${image.image}');
+
+    if (image.height != null) buffer.write(',height=${image.height}');
+    if (image.semanticLabel != null) {
+      buffer.write(',semanticLabel=${image.semanticLabel}');
+    }
+    if (image.width != null) buffer.write(',width=${image.width}');
+
+    return '[Image:$buffer]';
+  }
 
   String _inlineSpan(InlineSpan inlineSpan, {TextStyle parentStyle}) {
     if (inlineSpan is WidgetSpan) {
@@ -179,6 +228,20 @@ class Explainer {
     return s;
   }
 
+  String _sizedBox(SizedBox box) {
+    var clazz = box.runtimeType.toString();
+    var size = '${box.width?.toStringAsFixed(1) ?? 0.0}x'
+        '${box.height?.toStringAsFixed(1) ?? 0.0}';
+    if (size == 'InfinityxInfinity') {
+      clazz = 'SizedBox.expand';
+      size = '';
+    }
+
+    final child = box.child != null ? 'child=${_widget(box.child)}' : '';
+    final comma = size.isNotEmpty && child.isNotEmpty ? ',' : '';
+    return '[$clazz:$size$comma$child]';
+  }
+
   String _tableBorder(TableBorder b) {
     if (b == null) return '';
 
@@ -188,7 +251,7 @@ class Explainer {
     final left = _borderSide(b.left);
 
     if (top == right && right == bottom && bottom == left) {
-      return 'border=($top)';
+      return 'border=$top';
     }
 
     return 'borders=($top;$right;$bottom;$left)';
@@ -211,6 +274,11 @@ class Explainer {
 
   String _textDirection(TextDirection textDirection) =>
       textDirection.toString().replaceAll('TextDirection.', '');
+
+  String _textOverflow(TextOverflow textOverflow) =>
+      (textOverflow != null && textOverflow != TextOverflow.clip)
+          ? textOverflow.toString().replaceAll('TextOverflow.', '')
+          : '';
 
   String _textStyle(TextStyle style, TextStyle parent) {
     var s = '';
@@ -296,14 +364,17 @@ class Explainer {
   }
 
   String _widget(Widget widget) {
-    final explained = explainer?.call(widget);
+    final explained = explainer?.call(this, widget);
     if (explained != null) return explained;
 
     if (widget == widget0) return '[widget0]';
-    if (widget is ImageLayout) return '[$widget]';
 
     // ignore: invalid_use_of_protected_member
     if (widget is WidgetPlaceholder) return _widget(widget.build(context));
+
+    if (widget is Container) return _container(widget);
+
+    if (widget is Image) return _image(widget);
 
     if (widget is LayoutBuilder) {
       return _widget(widget.builder(
@@ -312,6 +383,8 @@ class Explainer {
       ));
     }
 
+    if (widget is SizedBox) return _sizedBox(widget);
+
     final type = widget.runtimeType
         .toString()
         .replaceAll('_MarginHorizontal', 'Padding');
@@ -319,36 +392,49 @@ class Explainer {
         ? "${widget is Center ? '' : 'alignment=${widget.alignment},'}"
         : widget is AspectRatio
             ? 'aspectRatio=${widget.aspectRatio.toStringAsFixed(2)},'
-            : widget is DecoratedBox
-                ? _boxDecoration(widget.decoration)
-                : widget is Directionality
-                    ? '${_textDirection(widget.textDirection)},'
-                    : widget is GestureDetector
-                        ? 'child=${_widget(widget.child)}'
-                        : widget is InkWell
+            : widget is ConstrainedBox
+                ? 'constraints=${_boxConstraints(widget.constraints)},'
+                : widget is DecoratedBox
+                    ? _boxDecoration(widget.decoration)
+                    : widget is Directionality
+                        ? '${_textDirection(widget.textDirection)},'
+                        : widget is GestureDetector
                             ? 'child=${_widget(widget.child)}'
-                            : widget is LimitedBox
-                                ? _limitBox(widget)
-                                : widget is Padding
-                                    ? '${_edgeInsets(widget.padding)},'
-                                    : widget is Positioned
-                                        ? '(${widget.top},${widget.right},${widget.bottom},${widget.left}),'
-                                        : widget is RichText
-                                            ? _inlineSpan(widget.text)
-                                            : widget is SizedBox
-                                                ? '${widget.width?.toStringAsFixed(1) ?? 0.0}x${widget.height?.toStringAsFixed(1) ?? 0.0}'
-                                                : widget is Table
-                                                    ? _tableBorder(
-                                                        widget.border)
-                                                    : widget is Text
-                                                        ? widget.data
-                                                        : widget is Wrap
-                                                            ? _wrap(widget)
-                                                            : '';
+                            : widget is InkWell
+                                ? 'child=${_widget(widget.child)}'
+                                : widget is LimitedBox
+                                    ? _limitBox(widget)
+                                    : widget is Padding
+                                        ? '${_edgeInsets(widget.padding)},'
+                                        : widget is Positioned
+                                            ? '(${widget.top},${widget.right},${widget.bottom},${widget.left}),'
+                                            : widget is RichText
+                                                ? _inlineSpan(widget.text)
+                                                : widget is SizedBox
+                                                    ? '${widget.width?.toStringAsFixed(1) ?? 0.0}x${widget.height?.toStringAsFixed(1) ?? 0.0}'
+                                                    : widget is Table
+                                                        ? _tableBorder(
+                                                            widget.border)
+                                                        : widget is Text
+                                                            ? widget.data
+                                                            : widget is Wrap
+                                                                ? _wrap(widget)
+                                                                : '';
+
+    var attrStr = '';
     final textAlign = _textAlign(widget is RichText
         ? widget.textAlign
         : (widget is Text ? widget.textAlign : null));
-    final textAlignStr = textAlign.isNotEmpty ? ',align=$textAlign' : '';
+    attrStr += textAlign.isNotEmpty ? ',align=$textAlign' : '';
+    final maxLines = widget is RichText
+        ? widget.maxLines
+        : widget is Text ? widget.maxLines : null;
+    if (maxLines != null) attrStr += ',maxLines=$maxLines';
+    final textOverflow = _textOverflow(widget is RichText
+        ? widget.overflow
+        : widget is Text ? widget.overflow : null);
+    attrStr += textOverflow.isNotEmpty ? ',overflow=$textOverflow' : '';
+
     final children = widget is MultiChildRenderObjectWidget
         ? (widget.children?.isNotEmpty == true && !(widget is RichText))
             ? "children=${widget.children.map(_widget).join(',')}"
@@ -359,8 +445,12 @@ class Explainer {
                 ? (widget.child != null ? 'child=${_widget(widget.child)}' : '')
                 : widget is SingleChildScrollView
                     ? 'child=${_widget(widget.child)}'
-                    : widget is Table ? '\n${_tableRows(widget)}\n' : '';
-    return '[$type$textAlignStr:$text$children]';
+                    : widget is Table
+                        ? '\n${_tableRows(widget)}\n'
+                        : widget is Tooltip
+                            ? 'child=${_widget(widget.child)},message=${widget.message}'
+                            : '';
+    return '[$type$attrStr:$text$children]';
   }
 
   String _wrap(Wrap wrap) {

@@ -4,15 +4,15 @@
 [![codecov](https://codecov.io/gh/daohoangson/flutter_widget_from_html/branch/master/graph/badge.svg)](https://codecov.io/gh/daohoangson/flutter_widget_from_html)
 [![Pub](https://img.shields.io/pub/v/flutter_widget_from_html_core.svg)](https://pub.dev/packages/flutter_widget_from_html_core)
 
-A Flutter plugin for building Flutter-widget tree from html.
+A Flutter package for building Flutter widget tree from HTML (supports most popular tags and stylings).
 
-This `core` package implements html parsing and widget building logic so it's easy to extend and fit your app's use case. It tries to render an optimal tree: use `Text` instead of `RichText` as much as possible, merge text spans together, show images in `AspectRatio`, etc.
+This `core` package implements html parsing and widget building logic so it's easy to extend and fit your app's use case. It tries to render an optimal tree: use `RichText` with specific `TextStyle`, merge spans together, show images in `AspectRatio`, etc.
 
 If this is your first time here, consider using the [`flutter_widget_from_html`](https://pub.dev/packages/flutter_widget_from_html) package as a quick starting point.
 
 ## Usage
 
-To use this plugin, add `flutter_widget_from_html_core` as a [dependency in your pubspec.yaml file](https://flutter.io/using-packages/).
+To use this package, add `flutter_widget_from_html_core` as a [dependency in your pubspec.yaml file](https://flutter.io/using-packages/).
 
 See the [Example app](https://github.com/daohoangson/flutter_widget_from_html/tree/master/packages/example) for inspiration.
 
@@ -55,9 +55,11 @@ class HelloWorldCoreScreen extends StatelessWidget {
         ),
       );
 }
+
+void main() => runApp(WidgetsApp(home: HelloWorldCoreScreen()));
 ```
 
-![](../../packages/example/screenshots/HelloWorldCoreScreen.jpg?raw=true)
+<img src="../../packages/example/screenshots/HelloWorldCoreScreen.gif?raw=true" width="300" />
 
 ## Features
 
@@ -72,8 +74,8 @@ Below tags are the ones that have special meaning / styling, all other tags will
   - Attributes: `type`, `start`, `reversed`
   - Inline style `list-style-type` values: `lower-alpha`, `upper-alpha`, `lower-latin`, `upper-latin`, `circle`, `decimal`, `disc`, `lower-roman`, `upper-roman`, `square`
 - TABLE/CAPTION/THEAD/TBODY/TFOOT/TR/TD/TH with support for:
-  - Attribute: `<table border="1">`
-  - Inline style: `<table style="border: 1px solid #f00">`
+  - TABLE attributes (`border`, `cellpadding`) and inline style (`border`)
+  - TD/TH attributes `colspan`, `rowspan` are parsed but ignored during rendering, use [`flutter_widget_from_html`](https://pub.dev/packages/flutter_widget_from_html) if you need them
 - ABBR, ACRONYM, ADDRESS, ARTICLE, ASIDE, B, BIG, BLOCKQUOTE, BR, CENTER, CITE, CODE,
   DD, DEL, DFN, DIV, DL, DT, EM, FIGCAPTION, FIGURE, FONT, FOOTER, HEADER, HR, I, IMG, INS,
   KBD, MAIN, NAV, P, PRE, Q, RP, RT, RUBY, S, SAMP, SECTION, STRIKE, STRONG, SUB, SUP, TT, U, VAR
@@ -95,15 +97,17 @@ However, these tags and their contents will be ignored:
 - color: hex values, `rgb()`, `hsl()` or named colors
 - direction (similar to `dir` attribute)
 - font-family
-- font-size: absolute (e.g. `xx-large`), relative (`larger`, `smaller`) and value in em/px
+- font-size: absolute (e.g. `xx-large`), relative (`larger`, `smaller`) and values (in `em`, `%` and `px`)
 - font-style: italic/normal
 - font-weight: bold/normal/100..900
-- line-height: number, percentage or `normal`
+- line-height: number, values (in `em`, `%` and `px`) or `normal`
 - margin and margin-xxx (values in `px`, `em`)
 - padding and padding-xxx (values in `px`, `em`)
 - vertical-align: baseline/top/bottom/middle/sub/super
 - text-align: center/justify/left/right
 - text-decoration: line-through/none/overline/underline
+- text-overflow: clip/ellipsis. Note: `text-overflow: ellipsis` should be used in conjuntion with `max-lines` or `-webkit-line-clamp` for better result.
+- Sizing (width & height, max-xxx, min-xxx) with values in `px`, `em`
 
 ## Extensibility
 

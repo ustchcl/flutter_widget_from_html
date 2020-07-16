@@ -1,19 +1,22 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui show ParagraphBuilder;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:html/dom.dart' as dom;
 
 import 'builder.dart';
-import 'core_html_widget.dart';
 import 'core_data.dart';
 import 'core_helpers.dart';
+import 'core_html_widget.dart';
 
 part 'ops/style_bg_color.dart';
 part 'ops/style_direction.dart';
+part 'ops/style_line_height.dart';
 part 'ops/style_margin.dart';
 part 'ops/style_padding.dart';
+part 'ops/style_sizing.dart';
 part 'ops/style_text_align.dart';
 part 'ops/style_vertical_align.dart';
 part 'ops/tag_a.dart';
@@ -28,16 +31,16 @@ part 'ops/text.dart';
 part 'parser/border.dart';
 part 'parser/color.dart';
 part 'parser/css.dart';
-part 'parser/line_height.dart';
 part 'parser/length.dart';
 
-final _dataUriRegExp = RegExp(r'^data:image/\w+;base64,');
+final _dataUriRegExp = RegExp(r'^data:image/[^;]+;(base64|utf8),');
 
 /// A factory to build widget for HTML elements.
 class WidgetFactory {
   BuildOp _styleBgColor;
   BuildOp _styleMargin;
   BuildOp _stylePadding;
+  BuildOp _styleSizing;
   BuildOp _styleTextAlign;
   BuildOp _styleVerticalAlign;
   BuildOp _tagA;
@@ -53,17 +56,6 @@ class WidgetFactory {
 
   HtmlWidget get widget => _widget;
 
-  Iterable<Widget> buildAligns(
-    BuildContext _,
-    Iterable<Widget> widgets,
-    Alignment alignment,
-  ) =>
-      widgets.map((widget) {
-        final x = _childOf(widget);
-        if (x is RichText || x is WidgetPlaceholder<TextBits>) return widget;
-        return Align(alignment: alignment, child: widget);
-      });
-
   Widget buildBody(Iterable<Widget> children) => buildColumn(children);
 
   Widget buildColumn(Iterable<Widget> children) => children?.isNotEmpty == true
@@ -74,6 +66,8 @@ class WidgetFactory {
       : null;
 
   static Iterable<Widget> _buildColumn(BuildContext c, Iterable<Widget> ws, _) {
+    if (ws == null) return null;
+
     final output = <Widget>[];
     final iter = ws.iterator;
     while (iter.moveNext()) {
@@ -146,7 +140,7 @@ class WidgetFactory {
     Iterable<Widget> widgets,
     GestureTapCallback onTap,
   ) =>
-      widgets.map((widget) => GestureDetector(child: widget, onTap: onTap));
+      widgets?.map((widget) => GestureDetector(child: widget, onTap: onTap));
 
   GestureTapCallback buildGestureTapCallbackForUrl(String url) => url != null
       ? () => widget.onTapUrl != null
@@ -165,29 +159,69 @@ class WidgetFactory {
         style: style,
       );
 
-  Widget buildImage(String url, {double height, String text, double width}) {
-    ImageProvider image;
-    if (url != null) {
-      if (url.startsWith('asset:')) {
-        image = buildImageFromAsset(url);
-      } else if (url.startsWith('data:')) {
-        image = buildImageFromDataUri(url);
-      } else {
-        image = buildImageFromUrl(url);
-      }
+  Widget buildImage(Object provider, ImgMetadata img) =>
+      provider != null && provider is ImageProvider && img != null
+          ? Image(
+              height: img.height,
+              loadingBuilder: buildImageLoadingBuilder(img),
+              errorBuilder: buildImageErrorWidgetBuilder(img),
+              image: provider,
+              semanticLabel: img.alt ?? img.title,
+              width: img.width,
+            )
+          : null;
+
+  ImageErrorWidgetBuilder buildImageErrorWidgetBuilder(ImgMetadata img) =>
+      (_, error, __) {
+        print('${img.url} error: $error');
+        final text = img.alt ?? img.title ?? '❌';
+        return Text(text);
+      };
+
+  ImageLoadingBuilder buildImageLoadingBuilder(ImgMetadata img) =>
+      img.width != null && img.height != null && img.height != 0
+          ? (_, child, __) => LayoutBuilder(
+                builder: (_, bc) {
+                  var w = img.width < bc.maxWidth ? img.width : bc.maxWidth;
+                  var h = img.height < bc.maxHeight ? img.height : bc.maxHeight;
+                  if (w != img.width || h != img.height) {
+                    final r = w / h;
+                    final ratio = img.width / img.height;
+                    if (r < ratio) {
+                      h = w / ratio;
+                    } else {
+                      w = h * ratio;
+                    }
+                  }
+
+                  return SizedBox(child: child, height: h, width: w);
+                },
+              )
+          : null;
+
+  Object buildImageProvider(String url) {
+    if (url?.startsWith('asset:') == true) {
+      return buildImageFromAsset(url);
     }
 
-    return image != null
-        ? ImageLayout(image, height: height, text: text, width: width)
-        : text != null ? Text(text) : null;
+    if (url?.startsWith('data:') == true) {
+      return buildImageFromDataUri(url);
+    }
+
+    return buildImageFromUrl(url);
   }
 
-  List buildImageBytes(String dataUri) {
+  Uint8List buildImageBytes(String dataUri) {
     final match = _dataUriRegExp.matchAsPrefix(dataUri);
     if (match == null) return null;
 
     final prefix = match[0];
-    final bytes = base64.decode(dataUri.substring(prefix.length));
+    final encoding = match[1];
+    final data = dataUri.substring(prefix.length);
+
+    final bytes = encoding == 'base64'
+        ? base64.decode(data)
+        : encoding == 'utf8' ? Uint8List.fromList(data.codeUnits) : null;
     if (bytes.isEmpty) return null;
 
     return bytes;
@@ -222,11 +256,36 @@ class WidgetFactory {
           ? Padding(child: child, padding: padding)
           : child;
 
-  Widget buildTable(List<TableRow> rows, {TableBorder border}) =>
-      rows?.isNotEmpty == true ? Table(border: border, children: rows) : null;
+  Widget buildTable(TableData table) {
+    final rows = <TableRow>[];
+    final slotIndices = <int>[];
+    final tableCols = table.cols;
+    final tableRows = table.rows;
 
-  TableCell buildTableCell(Widget child) =>
-      TableCell(child: buildPadding(child, widget.tableCellPadding) ?? widget0);
+    for (var r = 0; r < tableRows; r++) {
+      final cells = List<Widget>(tableCols);
+      for (var c = 0; c < tableCols; c++) {
+        final slot = table.getSlot(row: r, col: c);
+        if (slot == null || slotIndices.contains(slot.index)) {
+          cells[c] = widget0;
+          continue;
+        }
+
+        slotIndices.add(slot.index);
+        cells[c] = TableCell(
+          child: buildColumn(slot.cell.children),
+        );
+      }
+
+      rows.add(TableRow(children: cells));
+    }
+
+    final tableBorder = table.border != null
+        // TODO: support different styling for border sides
+        ? TableBorder.symmetric(inside: table.border, outside: table.border)
+        : null;
+    return Table(border: tableBorder, children: rows);
+  }
 
   Widget buildText(TextBits text) => (text..trimRight()).isNotEmpty
       ? WidgetPlaceholder(
@@ -243,15 +302,33 @@ class WidgetFactory {
     final tsb = text.tsb;
     final tsh = tsb?.build(context);
 
+    final maxLines = tsh?.maxLines == -1 ? null : tsh?.maxLines;
+    final overflow = tsh?.textOverflow ?? TextOverflow.clip;
+    final textAlign = tsh?.align ?? TextAlign.start;
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final widgets = <Widget>[];
     for (final compiled in _TextCompiler(text).compile(context)) {
       if (compiled is InlineSpan) {
-        widgets.add(RichText(
-          text: compiled,
-          textAlign: tsh?.align ?? TextAlign.start,
-          textScaleFactor: textScaleFactor,
-        ));
+        widgets.add(overflow == TextOverflow.ellipsis && maxLines == null
+            ? LayoutBuilder(
+                builder: (_, bc) => RichText(
+                      text: compiled,
+                      textAlign: textAlign,
+                      textScaleFactor: textScaleFactor,
+                      maxLines:
+                          bc.biggest.height.isFinite && bc.biggest.height > 0
+                              ? (bc.biggest.height / compiled.style.fontSize)
+                                  .floor()
+                              : null,
+                      overflow: overflow,
+                    ))
+            : RichText(
+                text: compiled,
+                textAlign: textAlign,
+                textScaleFactor: textScaleFactor,
+                maxLines: maxLines,
+                overflow: overflow,
+              ));
       } else if (compiled is Widget) {
         widgets.add(compiled);
       }
@@ -286,29 +363,38 @@ class WidgetFactory {
     return TextDecoration.combine(list);
   }
 
-  double buildTextFontSize(TextStyleBuilders tsb, TextStyle p, NodeMetadata m) {
+  double buildTextFontSize(BuildContext context, TextStyle p, NodeMetadata m) {
     final value = m.fontSize;
     if (value == null) return null;
 
     final parsed = parseCssLength(value);
-    if (parsed != null) return parsed.getValue(tsb.context, m.tsb);
+    if (parsed != null) {
+      final lengthValue = parsed.getValue(context, m.tsb);
+      if (lengthValue != null) return lengthValue;
 
-    final c = tsb.context;
+      if (parsed.unit == CssLengthUnit.percentage) {
+        return m.tsb.build(context).style.fontSize * parsed.number / 100;
+      }
+
+      return null;
+    }
+
+    final defaultFontSize = DefaultTextStyle.of(context).style.fontSize;
     switch (value) {
       case _kCssFontSizeXxLarge:
-        return DefaultTextStyle.of(c).style.fontSize * 2.0;
+        return defaultFontSize * 2.0;
       case _kCssFontSizeXLarge:
-        return DefaultTextStyle.of(c).style.fontSize * 1.5;
+        return defaultFontSize * 1.5;
       case _kCssFontSizeLarge:
-        return DefaultTextStyle.of(c).style.fontSize * 1.125;
+        return defaultFontSize * 1.125;
       case _kCssFontSizeMedium:
-        return DefaultTextStyle.of(c).style.fontSize;
+        return defaultFontSize;
       case _kCssFontSizeSmall:
-        return DefaultTextStyle.of(c).style.fontSize * .8125;
+        return defaultFontSize * .8125;
       case _kCssFontSizeXSmall:
-        return DefaultTextStyle.of(c).style.fontSize * .625;
+        return defaultFontSize * .625;
       case _kCssFontSizeXxSmall:
-        return DefaultTextStyle.of(c).style.fontSize * .5625;
+        return defaultFontSize * .5625;
 
       case _kCssFontSizeLarger:
         return p.fontSize * 1.2;
@@ -319,11 +405,14 @@ class WidgetFactory {
     return null;
   }
 
-  TextStyleHtml tsb(TextStyleBuilders tsb, TextStyleHtml p, NodeMetadata m) {
+  double buildTextStyleHeight(BuildContext c, TextStyleHtml p, String v) =>
+      _buildTextStyleHeight(this, c, p, v);
+
+  TextStyleHtml tsb(BuildContext context, TextStyleHtml p, NodeMetadata m) {
     if (m == null) return p;
 
     final decoration = buildTextDecoration(p.style, m);
-    final fontSize = buildTextFontSize(tsb, p.style, m);
+    final fontSize = buildTextFontSize(context, p.style, m);
     final fontStyle = buildFontStyle(m);
     if (m.color == null &&
         decoration == null &&
@@ -331,13 +420,11 @@ class WidgetFactory {
         m.fontFamilies == null &&
         fontSize == null &&
         fontStyle == null &&
-        m.fontWeight == null &&
-        m.height == null) {
+        m.fontWeight == null) {
       return p;
     }
 
     return p.copyWith(
-      height: m.height,
       style: p.style.copyWith(
         color: m.color,
         decoration: decoration,
@@ -354,6 +441,8 @@ class WidgetFactory {
 
   String constructFullUrl(String url) {
     if (url?.isNotEmpty != true) return null;
+    if (url.startsWith('data:')) return url;
+
     final p = Uri.tryParse(url);
     if (p == null) return null;
     if (p.hasScheme) return p.toString();
@@ -448,8 +537,6 @@ class WidgetFactory {
   Iterable<String> parseCssFontFamilies(String value) =>
       _parseCssFontFamilies(value);
 
-  CssLineHeight parseCssLineHeight(String value) => _parseCssLineHeight(value);
-
   CssLength parseCssLength(String value) => _parseCssLength(value);
 
   CssLengthBox parseCssLengthBox(NodeMetadata meta, String key) =>
@@ -509,6 +596,15 @@ class WidgetFactory {
           case _kCssDisplayNone:
             meta.isNotRenderable = true;
             break;
+          case _kCssDisplayTable:
+          case _kCssDisplayTableRow:
+          case _kCssDisplayTableHeaderGroup:
+          case _kCssDisplayTableRowGroup:
+          case _kCssDisplayTableFooterGroup:
+          case _kCssDisplayTableCell:
+          case _kCssDisplayTableCaption:
+            meta.op = tagTable();
+            break;
         }
         break;
 
@@ -566,10 +662,23 @@ class WidgetFactory {
         }
         break;
 
-      case _kCssLineHeight:
-        final lineHeight = parseCssLineHeight(value);
-        if (lineHeight != null) meta.height = lineHeight;
+      case _kCssHeight:
+      case _kCssMaxHeight:
+      case _kCssMaxWidth:
+      case _kCssMinHeight:
+      case _kCssMinWidth:
+      case _kCssWidth:
+        meta.op = styleSizing();
+        break;
 
+      case _kCssLineHeight:
+        meta.op = styleLineHeight(value);
+        break;
+
+      case _kCssMaxLines:
+      case _kCssMaxLinesWebkitLineClamp:
+        final maxLines = value == _kCssMaxLinesNone ? -1 : int.tryParse(value);
+        if (maxLines != null) meta.op = styleMaxLines(maxLines);
         break;
 
       case _kCssTextAlign:
@@ -595,6 +704,17 @@ class WidgetFactory {
               meta.decoUnder = true;
               break;
           }
+        }
+        break;
+
+      case _kCssTextOverflow:
+        switch (value) {
+          case _kCssTextOverflowClip:
+            meta.op = styleTextOverflow(TextOverflow.clip);
+            break;
+          case _kCssTextOverflowEllipsis:
+            meta.op = styleTextOverflow(TextOverflow.ellipsis);
+            break;
         }
         break;
 
@@ -645,7 +765,9 @@ class WidgetFactory {
 
       case 'blockquote':
       case 'figure':
-        meta.styles = [_kCssMargin, '1em 40px'];
+        meta
+          ..isBlockElement = true
+          ..styles = [_kCssMargin, '1em 40px'];
         break;
 
       case 'b':
@@ -680,7 +802,9 @@ class WidgetFactory {
         break;
 
       case 'dd':
-        meta.styles = [_kCssMargin, '0 0 1em 40px'];
+        meta
+          ..isBlockElement = true
+          ..styles = [_kCssMargin, '0 0 1em 40px'];
         break;
       case 'dl':
         meta.isBlockElement = true;
@@ -709,35 +833,41 @@ class WidgetFactory {
         meta
           ..fontSize = '2em'
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '0.67em 0'];
         break;
       case 'h2':
         meta
           ..fontSize = '1.5em'
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '0.83em 0'];
         break;
       case 'h3':
         meta
           ..fontSize = '1.17em'
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '1em 0'];
         break;
       case 'h4':
         meta
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '1.33em 0'];
         break;
       case 'h5':
         meta
           ..fontSize = '0.83em'
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '1.67em 0'];
         break;
       case 'h6':
         meta
           ..fontSize = '0.67em'
           ..fontWeight = FontWeight.bold
+          ..isBlockElement = true
           ..styles = [_kCssMargin, '2.33em 0'];
         break;
 
@@ -774,7 +904,9 @@ class WidgetFactory {
         break;
 
       case 'p':
-        meta.styles = [_kCssMargin, '1em 0'];
+        meta
+          ..isBlockElement = true
+          ..styles = [_kCssMargin, '1em 0'];
         break;
 
       case 'q':
@@ -806,8 +938,45 @@ class WidgetFactory {
         ];
         break;
 
-      case _kTagTable:
-        meta.op = tagTable();
+      case 'table':
+        meta
+          ..styles = [_kCssDisplay, _kCssDisplayTable]
+          ..op = _TagTable.cellPaddingOp(
+              (attrs.containsKey(_kAttributeCellPadding)
+                      ? double.tryParse(attrs[_kAttributeCellPadding])
+                      : null) ??
+                  1);
+        break;
+      case 'tr':
+        meta.styles = [_kCssDisplay, _kCssDisplayTableRow];
+        break;
+      case 'thead':
+        meta.styles = [_kCssDisplay, _kCssDisplayTableHeaderGroup];
+        break;
+      case 'tbody':
+        meta.styles = [_kCssDisplay, _kCssDisplayTableRowGroup];
+        break;
+      case 'tfoot':
+        meta.styles = [_kCssDisplay, _kCssDisplayTableFooterGroup];
+        break;
+      case 'td':
+        meta.styles = [_kCssDisplay, _kCssDisplayTableCell];
+        break;
+      case 'th':
+        meta.styles = [
+          _kCssDisplay,
+          _kCssDisplayTableCell,
+          _kCssFontWeight,
+          _kCssFontWeightBold,
+        ];
+        break;
+      case 'caption':
+        meta.styles = [
+          _kCssDisplay,
+          _kCssDisplayTableCaption,
+          _kCssTextAlign,
+          _kCssTextAlignCenter,
+        ];
         break;
     }
 
@@ -831,22 +1000,43 @@ class WidgetFactory {
     return _styleBgColor;
   }
 
-  BuildOp styleDirection(final String dir) => _styleDirection(this, dir);
+  BuildOp styleDirection(String dir) => _styleDirection(this, dir);
+
+  BuildOp styleLineHeight(String v) => _styleLineHeight(this, v);
 
   BuildOp styleMargin() {
     _styleMargin ??= _StyleMargin(this).buildOp;
     return _styleMargin;
   }
 
+  BuildOp styleMaxLines(int v) => BuildOp(
+      isBlockElement: true,
+      onPieces: (meta, pieces) {
+        meta.tsb.enqueue(_styleMaxLinesBuilder, v);
+        return pieces;
+      });
+
   BuildOp stylePadding() {
     _stylePadding ??= _StylePadding(this).buildOp;
     return _stylePadding;
+  }
+
+  BuildOp styleSizing() {
+    _styleSizing ??= _StyleSizing(this).buildOp;
+    return _styleSizing;
   }
 
   BuildOp styleTextAlign() {
     _styleTextAlign ??= _StyleTextAlign(this).buildOp;
     return _styleTextAlign;
   }
+
+  BuildOp styleTextOverflow(TextOverflow v) => BuildOp(
+      isBlockElement: true,
+      onPieces: (meta, pieces) {
+        meta.tsb.enqueue(_styleTextOverflowBuilder, v);
+        return pieces;
+      });
 
   BuildOp styleVerticalAlign() {
     _styleVerticalAlign ??= _StyleVerticalAlign(this).buildOp;
@@ -908,3 +1098,11 @@ class WidgetFactory {
 }
 
 Iterable<Widget> _listOrNull(Widget x) => x == null ? null : [x];
+
+TextStyleHtml _styleMaxLinesBuilder(
+        BuildContext _, TextStyleHtml parent, int maxLines) =>
+    parent.copyWith(maxLines: maxLines);
+
+TextStyleHtml _styleTextOverflowBuilder(
+        BuildContext _, TextStyleHtml parent, TextOverflow textOverflow) =>
+    parent.copyWith(textOverflow: textOverflow);

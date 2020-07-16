@@ -4,19 +4,17 @@
 [![codecov](https://codecov.io/gh/daohoangson/flutter_widget_from_html/branch/master/graph/badge.svg)](https://codecov.io/gh/daohoangson/flutter_widget_from_html)
 [![Pub](https://img.shields.io/pub/v/flutter_widget_from_html.svg)](https://pub.dev/packages/flutter_widget_from_html)
 
-A Flutter plugin for building Flutter-widget tree from html.
+A Flutter package for building Flutter widget tree from HTML with support for IFRAME, VIDEO and many other tags.
 
 This package extends the [`flutter_widget_from_html_core`](https://pub.dev/packages/flutter_widget_from_html_core) package with extra functionalities by using external depedencies like `cached_network_image` or `url_launcher`. It should be good enough as a quick starting point but you can always use the `core` directly if you dislike the dependencies.
 
 ## Usage
 
-To use this plugin, add `flutter_widget_from_html` as a [dependency in your pubspec.yaml file](https://flutter.io/using-packages/).
+To use this package, add `flutter_widget_from_html` as a [dependency in your pubspec.yaml file](https://flutter.io/using-packages/).
 
 See the [Example app](https://github.com/daohoangson/flutter_widget_from_html/tree/master/packages/example) for inspiration.
 
 ## Example
-
-Note: `HtmlWidget.config` is optional, see dartdoc for all available configuration keys and their default values.
 
 ```dart
 const kHtml = '''
@@ -52,9 +50,11 @@ class HelloWorldScreen extends StatelessWidget {
         ),
       );
 }
+
+void main() => runApp(MaterialApp(home: HelloWorldScreen()));
 ```
 
-![](packages/example/screenshots/HelloWorldScreen.png?raw=true)
+<img src="packages/example/screenshots/HelloWorldScreen.png?raw=true" width="300" />
 
 ## Features
 
@@ -70,13 +70,13 @@ Below tags are the ones that have special meaning / styling, all other tags will
   - `.webViewPadding`
   - To render IFRAME as web view: set `webView=true` in config and [setup iOS project manually](https://pub.dev/packages/webview_flutter#ios).
   - If the IFRAME has no `width` and `height` attributes, the web view will be rendered initially in a 16:9 box and automatically resize itself afterwards.
-- IMG with support for asset (`asset://`), data uri and network image via [`CachedNetworkImage`](https://pub.dev/packages/cached_network_image)
+- IMG with support for asset (`asset://`), data uri and network image via [`CachedNetworkImage`](https://pub.dev/packages/cached_network_image). Additional .svg file support via [flutter_svg](https://pub.dev/packages/flutter_svg).
 - LI/OL/UL with support for:
   - Attributes: `type`, `start`, `reversed`
   - Inline style `list-style-type` values: `lower-alpha`, `upper-alpha`, `lower-latin`, `upper-latin`, `circle`, `decimal`, `disc`, `lower-roman`, `upper-roman`, `square`
 - TABLE/CAPTION/THEAD/TBODY/TFOOT/TR/TD/TH with support for:
-  - Attribute: `<table border="1">`
-  - Inline style: `<table style="border: 1px solid #f00">`
+  - TABLE attributes (`border`, `cellpadding`) and inline style (`border`)
+  - TD/TH attributes `colspan`, `rowspan` via [flutter_layout_grid](https://pub.dev/packages/flutter_layout_grid)
 - SVG via [flutter_svg](https://pub.dev/packages/flutter_svg)
 - VIDEO via [chewie](https://pub.dev/packages/chewie)
 - ABBR, ACRONYM, ADDRESS, ARTICLE, ASIDE, B, BIG, BLOCKQUOTE, BR, CENTER, CITE, CODE,
@@ -98,15 +98,17 @@ These tags and their contents will be ignored:
 - color: hex values, `rgb()`, `hsl()` or named colors
 - direction (similar to `dir` attribute)
 - font-family
-- font-size: absolute (e.g. `xx-large`), relative (`larger`, `smaller`) and value in em/px
+- font-size: absolute (e.g. `xx-large`), relative (`larger`, `smaller`) and values (in `em`, `%` and `px`)
 - font-style: italic/normal
 - font-weight: bold/normal/100..900
-- line-height: number, percentage or `normal`
+- line-height: number, values (in `em`, `%` and `px`) or `normal`
 - margin and margin-xxx (values in `px`, `em`)
 - padding and padding-xxx (values in `px`, `em`)
 - vertical-align: baseline/top/bottom/middle/sub/super
 - text-align: center/justify/left/right
 - text-decoration: line-through/none/overline/underline
+- text-overflow: clip/ellipsis. Note: `text-overflow: ellipsis` should be used in conjuntion with `max-lines` or `-webkit-line-clamp` for better result.
+- Sizing (width & height, max-xxx, min-xxx) with values in `px`, `em`
 
 ## Extensibility
 

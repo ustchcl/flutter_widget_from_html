@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as dom;
 import 'builder.dart';
 import 'core_helpers.dart';
 
+part 'data/table_data.dart';
 part 'data/text_bits.dart';
 
 class BuildOp {
@@ -80,20 +81,6 @@ class CssBorders {
   CssBorderSide top;
 }
 
-class CssLineHeight {
-  final double _value;
-
-  CssLineHeight.normal() : _value = -1;
-
-  CssLineHeight.number(this._value) : assert(_value >= 0);
-
-  CssLineHeight.percentage(double value)
-      : assert(value >= 0),
-        _value = value / 100.0;
-
-  double get value => _value == -1 ? null : _value;
-}
-
 class CssLength {
   final double number;
   final CssLengthUnit unit;
@@ -106,13 +93,18 @@ class CssLength {
 
   bool get isNotEmpty => number > 0;
 
-  double getValue(BuildContext context, TextStyleBuilders tsb) {
+  double getValue(BuildContext context, TextStyleBuilders tsb) =>
+      getValueFromStyle(context, tsb.build(context).style);
+
+  double getValueFromStyle(BuildContext context, TextStyle style) {
     double value;
 
     switch (unit) {
       case CssLengthUnit.em:
-        value = tsb.build(context).style.fontSize * number / 1;
+        value = style.fontSize * number;
         break;
+      case CssLengthUnit.percentage:
+        return null;
       case CssLengthUnit.px:
         value = number;
         break;
@@ -130,18 +122,19 @@ class CssLengthBox {
   final CssLength bottom;
   final CssLength inlineEnd;
   final CssLength inlineStart;
-  final CssLength left;
-  final CssLength right;
+  final CssLength _left;
+  final CssLength _right;
   final CssLength top;
 
   const CssLengthBox({
     this.bottom,
     this.inlineEnd,
     this.inlineStart,
-    this.left,
-    this.right,
+    CssLength left,
+    CssLength right,
     this.top,
-  });
+  })  : _left = left,
+        _right = right;
 
   CssLengthBox copyWith({
     CssLength bottom,
@@ -155,47 +148,91 @@ class CssLengthBox {
         bottom: bottom ?? this.bottom,
         inlineEnd: inlineEnd ?? this.inlineEnd,
         inlineStart: inlineStart ?? this.inlineStart,
-        left: left ?? this.left,
-        right: right ?? this.right,
+        left: left ?? _left,
+        right: right ?? _right,
         top: top ?? this.top,
       );
+
+  bool get hasLeftOrRight =>
+      inlineEnd?.isNotEmpty == true ||
+      inlineStart?.isNotEmpty == true ||
+      _left?.isNotEmpty == true ||
+      _right?.isNotEmpty == true;
+
+  CssLength left(TextDirection dir) =>
+      _left ?? (dir == TextDirection.ltr ? inlineStart : inlineEnd);
+
+  CssLength right(TextDirection dir) =>
+      _right ?? (dir == TextDirection.ltr ? inlineEnd : inlineStart);
 }
 
 enum CssLengthUnit {
   em,
+  percentage,
   px,
 }
 
 @immutable
+class ImgMetadata {
+  final String alt;
+  final double height;
+  final String title;
+  final String url;
+  final double width;
+
+  ImgMetadata({
+    this.alt,
+    this.height,
+    this.title,
+    @required this.url,
+    this.width,
+  });
+}
+
+@immutable
 class TextStyleHtml {
-  final CssLineHeight height;
-  final TextStyle style;
   final TextAlign align;
+  final double height;
+  final int maxLines;
+  final TextStyle style;
+  final TextOverflow textOverflow;
 
   TextStyleHtml._({
-    this.height,
-    this.style,
     this.align,
+    this.height,
+    this.maxLines,
+    this.style,
+    this.textOverflow,
   });
 
   TextStyleHtml.style(this.style)
-      : height = null,
-        align = null;
+      : align = null,
+        height = null,
+        maxLines = null,
+        textOverflow = null;
 
   TextStyleHtml copyWith({
-    CssLineHeight height,
-    TextStyle style,
     TextAlign align,
+    double height,
+    int maxLines,
+    TextStyle style,
+    TextOverflow textOverflow,
   }) =>
       TextStyleHtml._(
-        height: height ?? this.height,
-        style: style ?? this.style,
         align: align ?? this.align,
+        height: height ?? this.height,
+        maxLines: maxLines ?? this.maxLines,
+        style: style ?? this.style,
+        textOverflow: textOverflow ?? this.textOverflow,
       );
 
-  TextStyle build(BuildContext _) {
+  TextStyle build(BuildContext context) {
     var built = style;
-    if (height != null) built = built.copyWith(height: height.value);
+
+    if (height != null && height >= 0) {
+      built = built.copyWith(height: height);
+    }
+
     return built;
   }
 }
@@ -214,7 +251,7 @@ class TextStyleBuilders {
   BuildContext get context => _context;
 
   void enqueue<T>(
-    TextStyleHtml Function(TextStyleBuilders, TextStyleHtml, T) builder, [
+    TextStyleHtml Function(BuildContext, TextStyleHtml, T) builder, [
     T input,
   ]) {
     assert(_output == null, 'Cannot add builder after being built');
@@ -234,7 +271,7 @@ class TextStyleBuilders {
 
     final l = _builders.length;
     for (var i = 0; i < l; i++) {
-      _output = _builders[i](this, _output, _inputs[i]);
+      _output = _builders[i](context, _output, _inputs[i]);
     }
 
     return _output;
