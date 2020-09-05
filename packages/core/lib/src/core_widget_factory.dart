@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui' as ui show ParagraphBuilder;
+import 'dart:ui' as ui show ParagraphBuilder, PlaceholderAlignment;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -305,6 +305,7 @@ class WidgetFactory {
                       overflow: overflow,
                     ))
             : RichText(
+                // text: WidgetSpan(child: (compiled as InlineSpan).te),
                 text: compiled,
                 textAlign: textAlign,
                 textScaleFactor: textScaleFactor,
@@ -312,7 +313,15 @@ class WidgetFactory {
                 overflow: overflow,
               ));
       } else if (compiled is Widget) {
-        widgets.add(compiled);
+        print("is inlinespan");
+        widgets.add(RichText(
+          text: WidgetSpan(
+              child: compiled, alignment: PlaceholderAlignment.middle),
+          textAlign: textAlign,
+          textScaleFactor: textScaleFactor,
+          maxLines: maxLines,
+          overflow: overflow,
+        ));
       }
     }
 

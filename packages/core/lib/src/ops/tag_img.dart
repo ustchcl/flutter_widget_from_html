@@ -58,10 +58,8 @@ class _TagImg {
 
 class _ImageBit extends TextWidget<ImgMetadata> {
   _ImageBit(TextBits parent, _TagImg self, ImgMetadata img)
-      : super(
-          parent,
-          WidgetPlaceholder(builder: self._wpb, input: img),
-        );
+      : super(parent, WidgetPlaceholder(builder: self._wpb, input: img),
+            alignment: PlaceholderAlignment.middle);
 
   @override
   WidgetSpan compile(TextStyle style) => _ImageSpan(
